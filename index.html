@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Morning Sports Briefing</title>
+  <meta name="theme-color" content="#0b1220">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Sports AM">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { -webkit-tap-highlight-color: transparent; }
+    details > summary { list-style: none; }
+    details > summary::-webkit-details-marker { display: none; }
+    details[open] .chev { transform: rotate(180deg); }
+    .chev { transition: transform .15s ease; }
+  </style>
+</head>
+<body class="bg-[#0b1220] text-slate-100 antialiased">
+  <div class="mx-auto max-w-xl px-4 pb-16" style="padding-top: max(1rem, env(safe-area-inset-top));">
+
+    <header class="flex items-end justify-between py-4">
+      <div>
+        <p class="text-xs font-semibold uppercase tracking-widest text-amber-400">Morning Briefing</p>
+        <h1 id="date" class="text-2xl font-bold leading-tight">Loading…</h1>
+      </div>
+      <button id="refresh" class="rounded-full bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-300 active:bg-slate-700">Refresh</button>
+    </header>
+
+    <p id="stale" class="hidden mb-4 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200"></p>
+    <p id="error" class="hidden mb-4 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200"></p>
+
+    <main id="app" class="space-y-6"></main>
+
+    <footer id="footer" class="mt-10 text-center text-xs leading-relaxed text-slate-500"></footer>
+  </div>
+
+<script>
+  // Builds elements with textContent only (no innerHTML), so model output can't inject markup.
+  function el(tag, cls, text) {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined && text !== null) n.textContent = text;
+    return n;
+  }
+  const str = (v) => (v === undefined || v === null ? '' : String(v));
+
+  function safeUrl(u) {
+    try {
+      const x = new URL(str(u));
+      return (x.protocol === 'https:' || x.protocol === 'http:') ? x.href : null;
+    } catch (_) { return null; }
+  }
+  function ytId(v) { return /^[\w-]{11}$/.test(str(v)) ? str(v) : null; }
+
+  function sectionTitle(text) {
+    return el('h2', 'mb-3 text-xs font-bold uppercase tracking-widest text-slate-400', text);
+  }
+
+  // ---------- media ----------
+  function renderImage(img) {
+    const href = img && safeUrl(img.url);
+    if (!href) return null;
+    const fig = el('figure', 'overflow-hidden rounded-xl bg-slate-900');
+    const im = document.createElement('img');
+    im.src = href;
+    im.alt = str(img.title);
+    im.loading = 'lazy';
+    im.referrerPolicy = 'no-referrer';
+    im.className = 'aspect-video w-full object-cover';
+    im.addEventListener('error', () => fig.remove()); // some publishers block hotlinking
+    fig.append(im);
+    const cap = el('figcaption', 'px-3 py-1.5 text-[11px] text-slate-400');
+    const page = safeUrl(img.page_url);
+    if (page) {
+      const a = el('a', 'underline-offset-2 hover:underline', 'Photo: ' + str(img.credit || 'source') + ' ↗');
+      a.href = page; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      cap.append(a);
+    } else {
+      cap.textContent = 'Photo: ' + str(img.credit || 'source');
+    }
+    fig.append(cap);
+    return fig;
+  }
+
+  function renderVideo(v) {
+    const id = ytId(v && v.id);
+    if (!id) return null;
+    const title = str(v.title) || 'Video';
+    const wrap = el('div', 'overflow-hidden rounded-xl bg-black');
+    const btn = el('button', 'relative block aspect-video w-full');
+    btn.type = 'button';
+    btn.setAttribute('aria-label', 'Play video: ' + title);
+    const th = document.createElement('img');
+    th.src = 'https://i.ytimg.com/vi/' + id + '/hqdefault.jpg';
+    th.alt = '';
+    th.loading = 'lazy';
+    th.className = 'h-full w-full object-cover';
+    const play = el('span', 'absolute inset-0 flex items-center justify-center');
+    play.append(el('span', 'flex h-14 w-14 items-center justify-center rounded-full bg-black/70 text-2xl text-white ring-2 ring-white/70', '▶'));
+    btn.append(th, play);
+    btn.addEventListener('click', () => {
+      const f = document.createElement('iframe');
+      f.src = 'https://www.youtube-nocookie.com/embed/' + id + '?autoplay=1&playsinline=1&rel=0';
+      f.title = title;
+      f.className = 'aspect-video w-full';
+      f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
+      f.allowFullscreen = true;
+      f.referrerPolicy = 'strict-origin-when-cross-origin';
+      btn.replaceWith(f);
+    });
+    wrap.append(btn);
+    const cap = el('div', 'flex items-center justify-between gap-2 px-3 py-2 text-[11px] text-slate-400');
+    cap.append(el('span', 'min-w-0 truncate', title + (v.channel ? ' · ' + str(v.channel) : '')));
+    const a = el('a', 'shrink-0 text-sky-400', 'YouTube ↗');
+    a.href = 'https://www.youtube.com/watch?v=' + id; a.target = '_blank'; a.rel = 'noopener noreferrer';
+    cap.append(a);
+    wrap.append(cap);
+    return wrap;
+  }
+
+  function mediaBlock(item) {
+    const nodes = [];
+    const img = renderImage(item.image);
+    if (img) nodes.push(img);
+    (item.videos || []).forEach((v) => { const n = renderVideo(v); if (n) nodes.push(n); });
+    if (!nodes.length) return null;
+    const box = el('div', 'space-y-3');
+    nodes.forEach((n) => box.append(n));
+    return box;
+  }
+
+  function renderReaction(r) {
+    const card = el('div', 'rounded-xl bg-slate-900/60 p-3 ring-1 ring-slate-700/60');
+    const head = el('div', 'flex items-center gap-2.5');
+    head.append(el('span', 'flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-700 text-sm font-bold text-slate-200', str(r.person).trim().charAt(0).toUpperCase()));
+    const who = el('div', 'min-w-0 flex-1');
+    who.append(el('p', 'truncate text-sm font-semibold', str(r.person)));
+    if (r.role) who.append(el('p', 'truncate text-[11px] text-slate-400', str(r.role)));
+    head.append(who);
+    if (r.platform) head.append(el('span', 'shrink-0 rounded-full bg-slate-700/80 px-2 py-0.5 text-[10px] font-medium text-slate-300', str(r.platform)));
+    card.append(head);
+    const body = r.is_direct_quote ? '“' + str(r.text) + '”' : str(r.text);
+    card.append(el('p', 'mt-2 text-sm leading-relaxed text-slate-200' + (r.is_direct_quote ? '' : ' italic'), body));
+    const foot = el('p', 'mt-1.5 text-[11px] text-slate-500');
+    const href = safeUrl(r.source_url);
+    if (href) {
+      const a = el('a', 'text-sky-400 underline-offset-2 hover:underline', 'via ' + str(r.source_name || 'source') + ' ↗');
+      a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      foot.append(a);
+    }
+    if (!r.is_direct_quote) foot.append(document.createTextNode(' · paraphrased'));
+    card.append(foot);
+    return card;
+  }
+
+  function reactionsBlock(list) {
+    if (!list || !list.length) return null;
+    const box = el('div', 'space-y-2');
+    list.forEach((r) => box.append(renderReaction(r)));
+    return box;
+  }
+
+  // ---------- sections ----------
+  function renderWatercooler(w) {
+    const card = el('section', 'rounded-2xl bg-gradient-to-br from-amber-500/20 to-slate-800/60 p-5 ring-1 ring-amber-400/30');
+    card.append(el('p', 'mb-2 text-xs font-bold uppercase tracking-widest text-amber-300', '🔥 Watercooler Headline'));
+    card.append(el('h2', 'text-xl font-extrabold leading-snug', str(w.headline)));
+    const media = mediaBlock(w);
+    if (media) { media.classList.add('mt-4'); card.append(media); }
+    card.append(el('p', 'mt-4 text-[15px] leading-relaxed text-slate-200', str(w.summary)));
+    if (w.why_it_matters) {
+      const why = el('p', 'mt-3 text-sm leading-relaxed text-amber-100/90');
+      why.append(el('span', 'font-semibold', 'Why it matters: '), document.createTextNode(str(w.why_it_matters)));
+      card.append(why);
+    }
+    return card;
+  }
+
+  function renderSaying(w) {
+    const r = reactionsBlock(w.reactions);
+    if (!r) return null;
+    const sec = el('section');
+    sec.append(sectionTitle('🗣️ What They’re Saying'));
+    sec.append(r);
+    return sec;
+  }
+
+  function renderTeams(teams) {
+    const sec = el('section');
+    sec.append(sectionTitle('⭐ Priority Teams Check-In'));
+    const list = el('div', 'space-y-3');
+    (teams || []).forEach((t) => {
+      const d = el('details', 'rounded-2xl bg-slate-800/70 ring-1 ring-slate-700/60');
+      const s = el('summary', 'flex cursor-pointer items-center justify-between gap-3 p-4');
+      const left = el('div', 'min-w-0');
+      left.append(el('p', 'truncate font-semibold', str(t.name)));
+      left.append(el('p', 'truncate text-sm text-slate-400', str(t.status)));
+      s.append(left, el('span', 'chev text-slate-500', '▾'));
+      d.append(s);
+      const body = el('div', 'space-y-3 border-t border-slate-700/60 p-4 text-sm leading-relaxed');
+      const media = mediaBlock(t);
+      if (media) body.append(media);
+      const row = (label, val) => {
+        if (!val) return;
+        const p = el('p');
+        p.append(el('span', 'block text-[11px] font-bold uppercase tracking-wider text-slate-500', label));
+        p.append(el('span', 'text-slate-200', str(val)));
+        body.append(p);
+      };
+      row('Last result', t.last_result);
+      row('Storyline', t.storyline);
+      row('Next up', t.next_up);
+      d.append(body);
+      list.append(d);
+    });
+    sec.append(list);
+    return sec;
+  }
+
+  function renderLeagues(leagues) {
+    const sec = el('section');
+    sec.append(sectionTitle('🏟️ Around the Leagues'));
+    const wrap = el('div', 'space-y-3');
+    Object.entries(leagues || {}).forEach(([league, items]) => {
+      const d = el('details', 'rounded-2xl bg-slate-800/70 ring-1 ring-slate-700/60');
+      d.open = true;
+      const s = el('summary', 'flex cursor-pointer items-center justify-between p-4');
+      s.append(el('span', 'font-semibold', league), el('span', 'chev text-slate-500', '▾'));
+      d.append(s);
+      const body = el('div', 'space-y-5 border-t border-slate-700/60 p-4');
+      (items || []).forEach((it) => {
+        const row = el('div', 'space-y-3');
+        const media = mediaBlock(it);
+        if (media) row.append(media);
+        const text = el('div');
+        text.append(el('p', 'text-sm font-semibold text-slate-100', str(it.headline)));
+        text.append(el('p', 'mt-0.5 text-sm leading-relaxed text-slate-300', str(it.detail)));
+        row.append(text);
+        const rx = reactionsBlock(it.reactions);
+        if (rx) row.append(rx);
+        body.append(row);
+      });
+      d.append(body);
+      wrap.append(d);
+    });
+    sec.append(wrap);
+    return sec;
+  }
+
+  function renderTalking(points) {
+    const sec = el('section');
+    sec.append(sectionTitle('💬 Talking Points'));
+    const wrap = el('div', 'space-y-3');
+    (points || []).forEach((p, i) => {
+      const c = el('div', 'rounded-2xl bg-slate-800/70 p-4 ring-1 ring-slate-700/60');
+      c.append(el('p', 'text-xs font-bold text-amber-400', 'Say this #' + (i + 1)));
+      c.append(el('p', 'mt-1 text-[15px] font-medium leading-snug', '“' + str(p.opener) + '”'));
+      c.append(el('p', 'mt-2 text-sm leading-relaxed text-slate-300', 'Then: ' + str(p.follow_up)));
+      wrap.append(c);
+    });
+    sec.append(wrap);
+    return sec;
+  }
+
+  function renderSources(sources) {
+    if (!sources || !sources.length) return null;
+    const d = el('details', 'rounded-2xl bg-slate-800/40 ring-1 ring-slate-700/50');
+    d.append(el('summary', 'cursor-pointer p-4 text-sm text-slate-400', 'Sources (' + sources.length + ')'));
+    const ul = el('ul', 'space-y-1.5 border-t border-slate-700/50 p-4 text-sm');
+    sources.forEach((s) => {
+      const li = el('li');
+      const a = el('a', 'break-words text-sky-400 underline-offset-2 hover:underline', str(s.title || s.url));
+      const href = safeUrl(s.url);
+      if (href) { a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer'; }
+      li.append(a);
+      ul.append(li);
+    });
+    d.append(ul);
+    return d;
+  }
+
+  function daysOld(iso) {
+    const t = new Date(iso + 'T12:00:00');
+    if (isNaN(t)) return 0;
+    return Math.floor((Date.now() - t.getTime()) / 86400000);
+  }
+
+  async function load() {
+    const app = document.getElementById('app');
+    const err = document.getElementById('error');
+    const stale = document.getElementById('stale');
+    err.classList.add('hidden');
+    stale.classList.add('hidden');
+    try {
+      const res = await fetch('data/briefing.json?ts=' + Date.now(), { cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+
+      document.getElementById('date').textContent = data.date_label || data.date || 'Today';
+      const parts = [
+        renderWatercooler(data.watercooler || {}),
+        renderSaying(data.watercooler || {}),
+        renderTeams(data.priority_teams),
+        renderLeagues(data.around_the_leagues),
+        renderTalking(data.talking_points),
+        renderSources(data.sources),
+      ].filter(Boolean);
+      app.replaceChildren(...parts);
+
+      const age = data.date ? daysOld(data.date) : 0;
+      if (age >= 2) {
+        stale.textContent = 'This briefing is ' + age + ' days old. The daily job may have failed; check the Actions tab.';
+        stale.classList.remove('hidden');
+      }
+      const gen = data.generated_at ? new Date(data.generated_at) : null;
+      document.getElementById('footer').textContent =
+        'AI-generated with Gemini + Google Search' + (gen && !isNaN(gen) ? ' · Updated ' + gen.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '') +
+        '. Photos belong to their publishers and link back to the original article; reactions are checked against the article they cite. Double-check anything important.';
+    } catch (e) {
+      err.textContent = 'Could not load today\'s briefing (' + e.message + ').';
+      err.classList.remove('hidden');
+      document.getElementById('date').textContent = 'Briefing unavailable';
+    }
+  }
+
+  document.getElementById('refresh').addEventListener('click', load);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
+  load();
+</script>
+</body>
+</html>
