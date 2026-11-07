@@ -24,7 +24,7 @@ from google.genai import types
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import media  # noqa: E402
 
-MODEL = "gemini-2.5-flash"
+MODEL = "gemini-3.8-flash"
 TZ = ZoneInfo("America/New_York")
 OUT_PATH = Path(__file__).resolve().parent.parent / "data" / "briefing.json"
 MAX_ATTEMPTS = 4
