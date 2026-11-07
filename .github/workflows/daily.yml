@@ -1,0 +1,55 @@
+name: Daily Sports Briefing
+
+on:
+  schedule:
+    # GitHub cron is UTC only. These two entries cover 4:00 AM Eastern year-round:
+    #   08:00 UTC = 4 AM EDT (summer), 09:00 UTC = 4 AM EST (winter).
+    # The script's --scheduled flag skips whichever run is too early or redundant.
+    - cron: "0 8 * * *"
+    - cron: "0 9 * * *"
+  workflow_dispatch: # manual "Run workflow" button (always generates)
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-briefing
+  cancel-in-progress: false
+
+jobs:
+  briefing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate briefing (scheduled)
+        if: github.event_name == 'schedule'
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python scripts/generate_briefing.py --scheduled
+
+      - name: Generate briefing (manual)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python scripts/generate_briefing.py
+
+      - name: Commit updated briefing
+        run: |
+          git config user.name "briefing-bot"
+          git config user.email "briefing-bot@users.noreply.github.com"
+          git add data/briefing.json
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Update briefing $(TZ=America/New_York date +%F)"
+            git push
+          fi
